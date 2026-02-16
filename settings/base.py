@@ -13,10 +13,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from settings.conf import *
 import os
+from datetime import timedelta
+from logging.handlers import RotatingFileHandler
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_URLCONF = "settings.urls"
 WSGI_APPLICATION = "settings.wsgi.application"
 ASGI_APPLICATION = "settings.asgi.application"
@@ -25,6 +28,8 @@ ASGI_APPLICATION = "settings.asgi.application"
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 # Application definition
 
@@ -106,8 +111,91 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
+        "rest_framework.permissions.AllowAny",
     ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+
+    # FORMATTERS
+    "formatters": {
+        "simple": {
+            "format": "%(levelname)s %(message)s",
+        },
+        "verbose": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(module)s %(message)s",
+        },
+    },
+
+    # FILTERS
+    "filters": {
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+    },
+
+    # HANDLERS
+    "handlers": {
+        # console handler
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+        },
+
+        # main log file
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "WARNING",
+            "filename": str(LOG_DIR / "app.log"),
+            "maxBytes": 5 * 1024 * 1024,  # 5 MB
+            "backupCount": 3,
+            "formatter": "verbose",
+        },
+
+        # debug requests (only when DEBUG=True)
+        "debug_requests": {
+            "class": "logging.FileHandler",
+            "level": "DEBUG",
+            "filename": str(LOG_DIR / "debug_requests.log"),
+            "formatter": "verbose",
+            "filters": ["require_debug_true"],
+        },
+    },
+
+    # LOGGERS
+    "loggers": {
+
+        # users app logger
+        "users": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+
+        # blog app logger
+        "blog": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+
+        # request logger
+        "django.request": {
+            "handlers": ["file", "debug_requests"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
 }
 
 
