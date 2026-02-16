@@ -53,6 +53,7 @@ class Post(BaseModel):
     )
     title = models.CharField(
         unique=True,
+        max_length=255,
     )
     slug = models.SlugField(
         unique=True,

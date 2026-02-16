@@ -7,14 +7,20 @@ from .serializers import RegisterSerializer, LoginSerializer
 
 from rest_framework import status
 import logging
+from django_ratelimit.decorators import ratelimit
+from django.utils.decorators import method_decorator
 
+RATE_LIMIT_BODY = {"detail:": "Too many requests, please try again later."}
 logger = logging.getLogger("users")
 
 class RegisterViewSet(ViewSet):
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
 
+    @method_decorator(ratelimit(key="ip", rate="5/m", block=True))
     def create(self, request):
+        if getattr(request, "limited", False):
+            return Response(RATE_LIMIT_BODY, status=status.HTTP_429_TOO_MANY_REQUESTS)
         email = request.data.get("email")
         logger.info (
             "Registration attempt for email: %s", email
@@ -37,6 +43,7 @@ class RegisterViewSet(ViewSet):
             "User registered: %s user_id: %s", user.email, user.id
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
 class TokenViewSet(ViewSet):
     permission_classes = [AllowAny]
     serializer_class = LoginSerializer
@@ -58,8 +65,10 @@ class TokenObtainPairViewSet(ViewSet):
     serializer_class = LoginSerializer
 
 
-
+    @ratelimit(key="ip", rate="5/m", block=True)
     def create(self, request):
+        if getattr(request, "limited", False):
+            return Response(RATE_LIMIT_BODY, status=status.HTTP_429_TOO_MANY_REQUESTS)
         email = request.data.get("email")
         logger.info (
             "Token obtain attempt for email: %s", email

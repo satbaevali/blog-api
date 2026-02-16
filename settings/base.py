@@ -15,7 +15,7 @@ from settings.conf import *
 import os
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
-
+from .conf import REDIS_URL  # Import all settings from conf.py
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -48,7 +48,7 @@ DJANGO_AND_THIRD_PARTY_APPS = [
 ]
 PROJECT_APPS = [
     "apps.blog",
-    "apps.users",
+    "apps.users.apps.UsersConfig",
 
 ]
 INSTALLED_APPS = DJANGO_AND_THIRD_PARTY_APPS + PROJECT_APPS
@@ -86,6 +86,16 @@ WSGI_APPLICATION = "settings.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+RATELIMIT_USE_CACHE = "default"
 
 
 

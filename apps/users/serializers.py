@@ -1,7 +1,8 @@
-from apps.users.models import CustomUser
+from .models import CustomUser
 from rest_framework import serializers
 from rest_framework.serializers import (
     ModelSerializer,
+    Serializer,
     
     SerializerMethodField,
     CharField,
@@ -52,23 +53,22 @@ class RegisterSerializer(ModelSerializer):
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         }
-class LoginSerializer(ModelSerializer):
+class LoginSerializer(Serializer):
     email = CharField()
-    password = CharField(
-        min_length=8,
-        write_only=True
-    )
+    password = CharField(min_length=8, write_only=True)
     access = CharField(read_only=True)
     refresh = CharField(read_only=True)
-    
+
     def validate(self, attrs):
         email = attrs.get("email")
         password = attrs.get("password")
+
+        # вариант 1: как у тебя (через check_password)
+        from .models import CustomUser
         user = CustomUser.objects.filter(email=email).first()
         if not user or not user.check_password(password):
-            raise ValidationError(
-                {"detail": "Invalid credentials"}
-            )
+            raise ValidationError({"detail": "Invalid credentials"})
+
         refresh = RefreshToken.for_user(user)
         return {
             "email": user.email,
