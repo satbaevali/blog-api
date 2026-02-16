@@ -20,14 +20,21 @@ class RegisterViewSet(ViewSet):
             "Registration attempt for email: %s", email
         )
         serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            logger.warning (
-                "Registration failed for email: %s - Errors: %s", email, serializer.errors
+
+        try:
+            if not serializer.is_valid():
+                logger.warning (
+                    "Registration failed for email: %s - Errors: %s", email, serializer.errors
+                )
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            user = serializer.save()
+        except Exception:
+            logger.exception (
+                "Registration error for email: %s", email
             )
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        user = serializer.save()
-        logger.info (
-            "Registration successful for email: %s - User ID: %s", email, user.id
+            raise
+        logging.info (
+            "User registered: %s user_id: %s", user.email, user.id
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 class TokenViewSet(ViewSet):
@@ -58,14 +65,20 @@ class TokenObtainPairViewSet(ViewSet):
             "Token obtain attempt for email: %s", email
         )
         serializer = self.serializer_class(data=request.data)
-        if not serializer.is_valid():
-            logger.warning (
-                "Token obtain failed for email: %s - Errors: %s", email, serializer.errors
+        try:
+            
+            if not serializer.is_valid():
+                logger.warning (
+                    "Token obtain failed for email: %s - Errors: %s", email, serializer.errors
+                )
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            logger.exception (
+                "Token obtain error for email: %s", email
             )
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            raise
         logger.info (
-            "Token obtain successful for email: %s", 
-            email
+            "Token obtained for email: %s", email
         )
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
     
@@ -80,11 +93,17 @@ class LoginViewSet(ViewSet):
             "Login attempt for email: %s", email
         )
         serializer = LoginSerializer(data=request.data)
-        if not serializer.is_valid():
-            logger.warning (
-                "Login failed for email: %s - Errors: %s", email, serializer.errors
+        try:
+            if not serializer.is_valid():
+                    logger.warning (
+                        "Login failed for email: %s - Errors: %s", email, serializer.errors
+                    )
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            logger.exception (
+                "Login error for email: %s", email
             )
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            raise
         logger.info (
             "Login successful for email: %s", email
         )
