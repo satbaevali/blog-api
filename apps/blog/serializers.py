@@ -1,13 +1,37 @@
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
-from .models import Post, Category, Tag, Comment
+from .models import Post, Category, Tag, Comment,CategoryTranslation
+from django.utils import timezone, formats,translation
 
 
-class CategorySerializer(ModelSerializer):
+
+class CategoryTranslationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CategoryTranslation
+        fields = ['language', 'name']
+
+class CategorySerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+    # Это поле позволяет принимать список переводов в JSON
+    translations = CategoryTranslationSerializer(many=True, write_only=True)
+
     class Meta:
         model = Category
-        fields = "__all__"
+        fields = ['id', 'name', 'slug', 'translations']
 
+    def get_name(self, obj):
+        # Используем метод, который мы исправили в моделях (через фильтрацию)
+        return obj.get_name()
+
+    def create(self, validated_data):
+        # Извлекаем данные переводов
+        translations_data = validated_data.pop('translations')
+        # Создаем основную категорию
+        category = Category.objects.create(**validated_data)
+        # Создаем записи в таблице переводов
+        for trans_data in translations_data:
+            CategoryTranslation.objects.create(category=category, **trans_data)
+        return category
 
 class TagSerializer(ModelSerializer):
     class Meta:
@@ -65,6 +89,15 @@ class PostSerializer(ModelSerializer):
         if tags is not None:
             post.tags.set(tags)
         return post
+    def get_created_at_formatted(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            user_tz = timezone.get_current_timezone()
+            local_time = obj.created_at.astimezone(user_tz)
+        else:
+            local_time = obj.created_at
+        return formats.date_format(local_time, "DATETIME_FORMAT")   
+
 
 
 class CommentSerializer(ModelSerializer):
@@ -74,3 +107,12 @@ class CommentSerializer(ModelSerializer):
         model = Comment
         fields = ("id", "author", "post", "body", "created_at")  # updated_at только если он есть в модели
         read_only_fields = ("id", "author", "created_at")
+
+    def get_created_at_formatted(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            user_tz = timezone.get_current_timezone()
+            local_time = obj.created_at.astimezone(user_tz)
+        else:
+            local_time = obj.created_at
+        return formats.date_format(local_time, "DATETIME_FORMAT")   

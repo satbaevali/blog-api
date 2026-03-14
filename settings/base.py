@@ -16,6 +16,7 @@ import os
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
 from .conf import REDIS_URL  # Import all settings from conf.py
+from django.utils.translation import gettext_lazy as _
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,11 +43,16 @@ DJANGO_AND_THIRD_PARTY_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
+    'django_redis',
+    
+    'debug_toolbar',
     
 
     
 ]
 PROJECT_APPS = [
+    "apps.core.apps.CoreConfig",
     "apps.blog",
     "apps.users.apps.UsersConfig",
 
@@ -56,6 +62,8 @@ INSTALLED_APPS = DJANGO_AND_THIRD_PARTY_APPS + PROJECT_APPS
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
+    "apps.core.middleware.LanguageTimezoneMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -68,7 +76,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR/"templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -125,6 +133,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {
@@ -207,17 +216,38 @@ LOGGING = {
         },
     },
 }
+SPECTtacular_SETTINGS = {
+    "TITLE": "Blog API",
+    "DESCRIPTION": "API for managing blog posts, comments, and categories with multilingual support.",
+    "VERSION":'2.0.0',
+    "SERVE_INCLUDE_SCHEMA": False,
+    'SCHEMA_PATH_PREFIX': r'/api',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'TAGS':[
+        {"name": "Auth", "description": "Endpoints related to user registration and login."},
+        {"name": "Posts", "description": "Operations related to blog posts."},
+        {"name": "Comments", "description": "Operations related to comments on posts."},
+        {"name": "Categories", "description": "Operations related to post categories."},
+    ]
+}
 
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "en"
+LANGUAGES = [
+    ("en", _("English")),
+    ("ru", _("Russian")),
+    ("kk", _("Kazakh")),
+]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 
 TIME_ZONE = "UTC"
 
 USE_I18N = True
+USE_L10N = True
 
 USE_TZ = True
 
@@ -228,3 +258,6 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.CustomUser"
+
+Email_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "no-reply@example.com"

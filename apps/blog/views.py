@@ -9,10 +9,14 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-
-from .models import Post, Comment
+from django.utils.translation import get_language
+from .models import Post, Comment,Category
 from .permissions import IsAuthorOrReadOnly
-from .serializers import PostSerializer, CommentSerializer
+from .serializers import PostSerializer, CommentSerializer,CategorySerializer
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 
 logger = logging.getLogger("blog")
 
@@ -23,9 +27,105 @@ RATE_LIMIT_BODY = {"detail": "Too many requests. Try again later."}
 REDIS_COMMENTS_CHANNEL = "comments"
 REDIS_URL = settings.CACHES["default"]["LOCATION"]
 
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [AllowAny]
+    @extend_schema(
+        tags=['categories'],
+        summary="List categories",
+        description="Retrieve a list of all categories. Cached for 15 minutes. Varies by Accept-Language header.",
+        responses={200: CategorySerializer(many=True),
+                   429: OpenApiResponse(description="Too many requests")},
+        examples=[
+            OpenApiExample(
+                "Successful response",
+                value=[
+                    {
+                        "id": 1,
+                        "name": "Technology",
+                        "slug": "technology"
+                    },
+                    {
+                        "id": 2,
+                        "name": "Health",
+                        "slug": "health"
+                    }
+                ]
+                
+            )
+        ]
+
+    )
+
+    # Кэшируем на 15 минут
+    @method_decorator(cache_page(60 * 15))
+    # Указываем Django, что ответ зависит от заголовка Accept-Language и наших кастомных параметров
+    @method_decorator(vary_on_headers("Accept-Language", "Cookie"))
+
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        if getattr(request, "limited", False):
+            return Response(RATE_LIMIT_BODY, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        return super().create(request, *args, **kwargs)
+    
+
+    # Инвалидация кэша при создании/обновлении/удалении
+    def perform_create(self, serializer):
+        serializer.save()
+        self._clear_cache()
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._clear_cache()
+
+    def _clear_cache(self):
+        # Очищаем весь кэш, связанный с категориями, при любом изменении
+        # В идеале здесь используется cache.delete_pattern("categories_*") если стоит django-redis
+        cache.clear()
+
+
 class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
     lookup_field = "slug"
+
+    @extend_schema(
+        tags=['posts'],
+        summary="List posts",
+        description="Retrieve a list of published posts. Cached for 60 seconds. Varies by Accept-Language header.",
+        responses={200: PostSerializer(many=True),              
+                     429: OpenApiResponse(description="Too many requests")},
+        examples=[
+            OpenApiExample(         
+                "Successful response",
+                value=[
+                    {
+                        "id": 1,
+                        "author": "user1",
+                        "title": "First Post",
+                        "slug": "first-post",
+                        "body": "This is the body of the first post.",
+                        "category": {
+                            "id": 1,
+                            "name": "Technology",
+                            "slug": "technology"
+                        },
+                        "tags": [
+                            {
+                                "id": 1,
+                                "name": "Django",
+                                "slug": "django"
+                            }
+                        ],
+                        "created_at": "2024-01-01T12:00:00Z",
+                        "updated_at": "2024-01-01T12:00:00Z"
+                    }
+                ]
+            )
+        ]
+    )
 
     def get_queryset(self):
         qs = (
@@ -46,6 +146,7 @@ class PostViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated(), IsAuthorOrReadOnly()]
 
     def list(self, request, *args, **kwargs):
+        current_language = get_language()
         cached = cache.get(POSTS_LIST_CACHE_KEY)
         if cached is not None:
             return Response(cached, status=status.HTTP_200_OK)
@@ -137,6 +238,28 @@ class PostViewSet(viewsets.ModelViewSet):
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     queryset = Comment.objects.select_related("author", "post").order_by("-created_at")
+
+    @extend_schema(
+        tags=['comments'],
+        summary="List comments",
+        description="Retrieve a list of comments. No authentication required.",
+        responses={200: CommentSerializer(many=True),
+                   429: OpenApiResponse(description="Too many requests")},
+        examples=[          
+            OpenApiExample(
+                "Successful response",
+                value=[
+                    {
+                        "id": 1,
+                        "author": "user1",
+                        "post": 1,
+                        "body": "This is a comment.",
+                        "created_at": "2024-01-01T12:00:00Z"
+                    }
+                ]
+            )
+        ]
+    )
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):

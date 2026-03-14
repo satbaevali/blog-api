@@ -3,23 +3,19 @@ from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 
 # Project modules
-from apps.blog.models import Category, Tag, Post, Comment
+from apps.blog.models import Category, Tag, Post,CategoryTranslation,Comment
 
+
+# Это позволит добавлять переводы прямо на странице категории
+class CategoryTranslationInline(admin.TabularInline):
+    model = CategoryTranslation
+    extra = 3 # Сразу покажет 3 пустых поля (для en, ru, kk)
 
 @admin.register(Category)
-class CategoryAdmin(ModelAdmin):
-    list_display = (
-        "name",
-        "slug",
-        "created_at",
-        "updated_at",
-        "deleted_at",
-    )
-
-    search_fields = ("name",)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "created_at")
     prepopulated_fields = {"slug": ("name",)}
-    ordering = ("-created_at",)
-
+    inlines = [CategoryTranslationInline] # Добавляем инлайны
 
 @admin.register(Tag)
 class TagAdmin(ModelAdmin):
