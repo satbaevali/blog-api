@@ -13,6 +13,7 @@ from rest_framework.serializers import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from apps.users.tasks import send_welcome_email
 
 # Project modules
 from apps.users.models import CustomUser
@@ -72,6 +73,9 @@ class RegistrationSerializer(ModelSerializer):
         validated_data.pop("password_confirm")
         user = CustomUser.objects.create_user(**validated_data)
         logger.info(f"User created successfully: user_id={user.id}, email={email}")
+        send_welcome_email.delay(user.id)
+        logger.info(f"Triggered welcome email task for user_id={user.id}")
+        
         return user
 
     def get_tokens(self, obj: CustomUser) -> dict[str, str]:

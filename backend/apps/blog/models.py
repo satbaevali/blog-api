@@ -8,6 +8,7 @@ from django.db.models import (
     ManyToManyField,
     CASCADE,
     SET_NULL,
+    DateTimeField,
 )
 from django.utils.text import slugify
 
@@ -86,6 +87,7 @@ class Post(AbstractTimeStamptModel):
     class Status(TextChoices):
         DRAFT = "draft"
         PUBLISHED = "published"
+        SCHEDULED = "scheduled"
 
     author = ForeignKey(
         to=CustomUser,
@@ -115,6 +117,12 @@ class Post(AbstractTimeStamptModel):
         max_length=10,
         choices=Status.choices,
         default=Status.DRAFT,
+    )
+    publish_at = DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Scheduled publish time (required if status is 'scheduled')",
     )
 
     def __str__(self):

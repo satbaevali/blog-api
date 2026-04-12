@@ -1,3 +1,4 @@
+
 asgiref==3.11.1
 Django==5.0
 django-extensions==3.2.3
@@ -11,3 +12,9 @@ PyJWT==2.11.0
 python-decouple==3.8
 redis==7.1.1
 sqlparse==0.5.5
+# --- HW3 additions ---
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2
+celery==5.4.0
+flower==2.0.1

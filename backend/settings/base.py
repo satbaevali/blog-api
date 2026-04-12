@@ -18,6 +18,7 @@ Apps
 """
 
 DJANGO_AND_THIRD_PARTY_APPS = [
+    "daphne",                          
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -27,12 +28,15 @@ DJANGO_AND_THIRD_PARTY_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "django_extensions",
-]
+    "channels",           
+]             
 
 PROJECT_APPS = [
     "apps.abstract",
     "apps.blog",
     "apps.users",
+    "apps.notifications",
+
 ]
 
 INSTALLED_APPS = DJANGO_AND_THIRD_PARTY_APPS + PROJECT_APPS
@@ -137,9 +141,6 @@ REST_FRAMEWORK = {
 }
 
 """
-Caching
-"""
-
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -151,6 +152,8 @@ CACHES = {
         "TIMEOUT": 300,
     }
 }
+"""
+
 
 """
 Middleware | Templates | Validators
@@ -196,7 +199,18 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+"""
+Channel Layers (Django Channels + Redis)
+"""
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("redis", 6379)],
+        },
+    },
+}
 
 """
 Internalizations
@@ -217,3 +231,19 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+"""Celery conf"""
+CELERY_BROKER_URL = "redis://localhost:6379/1"
+  # noqa: F405
+CELERY_RESULT_BACKEND = "redis://localhost:6379/1"  # noqa: F405
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+CELERY_BEAT_SCHEDULE = "django_celery_beat.schedulers:DatabaseScheduler"
+
+REDIS_HOST = config("REDIS_HOST", default="localhost")
+REDIS_PORT = config("REDIS_PORT", default=6379, cast=int)
+REDIS_DB = config("REDIS_DB", default=0, cast=int)
+
+DEBUG = config("DEBUG", default=True, cast=bool)

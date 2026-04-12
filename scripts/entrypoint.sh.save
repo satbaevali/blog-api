@@ -1,0 +1,20 @@
+
+
+#!/bin/sh
+set -e
+echo "=== Blog API Entrypoint ==="
+echo "Redis is available"
+cd /app/backend
+echo "Running migrations..."
+python manage.py migrate --noinput
+echo "Migrations complete"
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
+echo "Static files collected"
+python manage.py compilemessages --ignore=venv 2>/dev/null || true
+if [ "${BLOG_SEED_DB}" = "true" ]; then
+    echo "Seeding database..."
+    python manage.py seed
+fi
+echo "Starting: $@"
+exec "$@"

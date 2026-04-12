@@ -1,6 +1,9 @@
 # Python modules
 from typing import Any
 import logging
+import asyncio
+import json
+from django.conf import settings
 
 # Third-party modules
 from rest_framework.viewsets import ViewSet
@@ -15,11 +18,17 @@ from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_401_UNAUTHORIZED,
 )
+
 from rest_framework.exceptions import NotFound, PermissionDenied
+import redis.asyncio as aioredis
+
+
+
 
 # Django modules
 from django.db.models import Q
 from django.core.cache import cache
+from django.http import StreamingHttpResponse
 
 # Project modules
 from apps.blog.models import Post, Comment
@@ -32,6 +41,10 @@ from apps.blog.serializers import (
 from apps.blog.permissions import IsAuthorOrReadOnly
 from apps.abstract.pagination import DefaultPagination
 from apps.abstract.ratelimit import ratelimit
+from .sse import published_post_event
+from apps.blog.tasks import invalidate_posts_cache
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +170,13 @@ class PostViewSet(ViewSet):
         )
 
         if serializer.is_valid():
+            
             post = serializer.save(author=request.user)
+            if post.status == Post.Status.PUBLISHED:
+                published_post_event(post)
 
-            cache.delete("published_posts_list")
+
+            invalidate_posts_cache.delay()
             logger.info("Invalidated published posts cache after post creation")
 
             logger.info(
@@ -238,9 +255,12 @@ class PostViewSet(ViewSet):
         )
 
         if serializer.is_valid():
-            serializer.save()
+            update_post = serializer.save()
+            if update_post.status == Post.Status.PUBLISHED:
+                published_post_event(update_post)
 
-            cache.delete("published_posts_list")
+
+            invalidate_posts_cache.delay()
             logger.info("Invalidated published posts cache after post update")
 
             logger.info(
@@ -522,3 +542,47 @@ class CommentViewSet(ViewSet):
             f"user_id={request.user.id}"
         )
         return DRFResponse(status=HTTP_204_NO_CONTENT)
+
+async def post_stream_view(request):
+    """
+    SSE  Endpoint: GET /api/posts/stream/
+
+    its for 
+    -Post published events stream (no auth required)
+
+    """
+
+    async def event_stream():
+        redis_host = getattr(settings, "REDIS_HOST", "localhost")
+        redis_port = getattr(settings, "REDIS_PORT", 6379)
+        redis_client = aioredis.from_url(
+            f"redis://{redis_host}:{redis_port}/0",
+        )
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe("post_published")
+
+        try:
+            yield "data: Connected to post stream\n\n"
+
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    data = message['data']
+                    if isinstance(data, bytes):
+                        data = data.decode('utf-8')
+                    logger.info(f"Received post published event: {data}")
+                    yield f"data: {json.dumps({'event': 'post_published', 'data': data})}\n\n"
+
+        except asyncio.CancelledError:
+            logger.info("Post stream connection cancelled")
+            pass
+        finally:
+            await pubsub.unsubscribe("post_published")
+            await pubsub.close()
+            await redis_client.aclose()
+    responce = StreamingHttpResponse(
+        event_stream(), 
+        content_type="text/event-stream"
+    )
+    responce['Cache-Control'] = 'no-cache'
+    responce['X-Accel-Buffering'] = 'no'
+    return responce

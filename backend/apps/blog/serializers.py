@@ -9,11 +9,14 @@ from rest_framework.serializers import (
     SlugField,
     PrimaryKeyRelatedField,
 )
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 # Project modules
 from apps.blog.models import Post, Category, Tag, Comment
 from apps.users.models import CustomUser
 from apps.blog.redis_client import publish_comment_event
+from apps.notifications.tasks import process_new_comment_notification
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +214,9 @@ class CommentSerializer(ModelSerializer):
         logger.info("Creating comment via serializer")
         comment = super().create(validated_data)
         logger.debug(f"Comment created in serializer: comment_id={comment.id}")
-        publish_comment_event(comment)
+
+        process_new_comment_notification.delay(comment.id)
+        logger.info(f"Triggered notification task for comment_id={comment.id}")
         return comment
 
     def update(self, instance, validated_data):
