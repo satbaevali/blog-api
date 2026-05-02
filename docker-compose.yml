@@ -1,11 +1,109 @@
 services:
+
   redis:
-    image: redis:latest
-    container_name: redis
+    image: redis:7-alpine
+    container_name: blog_redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_web
+    # ⚠️ NO host port mapping — only nginx can reach web
+    expose:
+      - "8000"
+    env_file:
+      - backend/settings/.env
+    environment:
+      - BLOG_ENV_ID=prod
+    volumes:
+      - sqlite_data:/app/backend
+      - static_data:/app/backend/static
+      - media_data:/app/backend/media
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: daphne -b 0.0.0.0 -p 8000 settings.asgi:application
+
+  # ----------------------------------------------------------------
+  # Nginx — reverse proxy, serves static/media, forwards to Daphne
+  # Only service published to host on port 80
+  # ----------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: blog_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/var/www/static:ro
+      - media_data:/var/www/media:ro
+    depends_on:
+      - web
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_celery_worker
+    env_file:
+      - backend/settings/.env
+    environment:
+      - BLOG_ENV_ID=prod
+    volumes:
+      - sqlite_data:/app/backend
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A settings worker -l info
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_celery_beat
+    env_file:
+      - backend/settings/.env
+    environment:
+      - BLOG_ENV_ID=prod
+    volumes:
+      - sqlite_data:/app/backend
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A settings beat -l info
+
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_flower
+    ports:
+      - "5555:5555"
+    env_file:
+      - backend/settings/.env
+    environment:
+      - BLOG_ENV_ID=prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A settings flower
+      --basic_auth=${BLOG_FLOWER_USER}:${BLOG_FLOWER_PASSWORD}
+      --port=5555
 
 volumes:
   redis_data:
+  sqlite_data:
+  static_data:
+  media_data:
+
